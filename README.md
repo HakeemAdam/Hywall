@@ -13,12 +13,28 @@ Generates 5 palette variants: Main, Pastels, Warm Shift, Dark Mode, and Cool Shi
 - Colour space selector for exports (sRGB, ACEScg, OKLab, etc.)
 
 ## Installation
-1. Clone or download this repo
-2. Copy `hywall.json` to `~/houdini21.0/packages/` (create the `packages` folder if it doesn't exist)
+1. Download or clone into your Houdini prefs folder:
+        
+        Linux
+            cd ~/houdini21.0
+            git clone https://github.com/yourname/hywall
+
+        Windows
+               cd %USERPROFILE%\Documents\houdini21.0
+               git clone https://github.com/yourname/hywall
+           
+
+2. Copy the package file (create `packages/` if it doesn't exist):
+
+        Linux
+            cp ~/houdini21.0/hywall/hywall.json ~/houdini21.0/packages/
+        Windows
+            copy %USERPROFILE%\Documents\houdini21.0\hywall\hywall.json %USERPROFILE%\Documents\houdini21.0\packages\
+
 3. Restart Houdini
 4. Open via **Parameter Panel > Hywall**
 
-> If you placed the repo outside your Houdini prefs folder, edit `hywall.json` and replace `$PACKAGE_PATH` with the full path to the repo.
+> If you placed the repo outside your Houdini prefs folder, edit `hywall.json` and replace `$HOUDINI_USER_PREF_DIR/hywall ` with the full path to the repo.
 
 ## Requirements
 - Houdini 21+ (Pillow and Coloraide are bundled)
