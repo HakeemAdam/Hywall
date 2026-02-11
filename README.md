@@ -1,6 +1,8 @@
 # Hywall
-Hywall is a tool for generating inspiring colour palettes from images in Houdini.Generates 5 palette variants: Main, Pastels, Warm Shift, Dark Mode, and Cool Shift.
+Hywall is a tool for generating inspiring colour palettes from images in Houdini. 
+Generates 5 palette variants: Main, Pastels, Warm Shift, Dark Mode, and Cool Shift.
 
+![HywallScreenShot.png](HywallScreenShot.png)
 
 ## Features
 - Generate colour palettes from any image
@@ -14,7 +16,7 @@ Hywall is a tool for generating inspiring colour palettes from images in Houdini
 1. Clone or download this repo
 2. Copy `hywall.json` to `~/houdini21.0/packages/` (create the `packages` folder if it doesn't exist)
 3. Restart Houdini
-4. Open via **Paramter > Hywall**
+4. Open via **Parameter Panel > Hywall**
 
 > If you placed the repo outside your Houdini prefs folder, edit `hywall.json` and replace `$PACKAGE_PATH` with the full path to the repo.
 

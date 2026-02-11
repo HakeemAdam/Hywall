@@ -23,8 +23,9 @@ class ColorBox(QWidget):
     def __init__(self):
         super().__init__()
 
-        self.info = """Hywall is a tool for generating inspiring colour palettes from images in Houdini. 
-            It is inspired by Pywall and Pastel. Developed by Hakeem Adam [hakeemadam.info].
+        self.info = """Image-to-palette tool for Houdini. 
+        Generates 5 palette variants: Main, Pastels, Warm Shift, Dark Mode, and Cool Shift.
+        Developed by Hakeem Adam [hakeemadam.info].
 
         * Instructions
             - Add an image to generate a colour palette
@@ -91,7 +92,7 @@ class ColorBox(QWidget):
         # tabs
         tab_widget = QTabWidget()
 
-        self.image_section = QGroupBox("Image")
+        self.image_section = QGroupBox()
 
         # main layout
         image_layout = QVBoxLayout()
@@ -153,7 +154,7 @@ class ColorBox(QWidget):
         self.image_section.setLayout(image_layout)
 
         # help section
-        help_section = QGroupBox("Help")
+        help_section = QGroupBox()
         help_layout = QVBoxLayout()
         help_text = QLabel(self.info)
         help_layout.addWidget(help_text)
