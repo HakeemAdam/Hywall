@@ -2,7 +2,7 @@
 Hywall is a tool for generating inspiring colour palettes from images in Houdini. 
 Generates 5 palette variants: Main, Pastels, Warm Shift, Dark Mode, and Cool Shift.
 
-![HywallScreenShot.png](HywallScreenShot.png)
+![HywallDemo.gif](HywallDemo.gif)
 
 ## Features
 - Generate colour palettes from any image
