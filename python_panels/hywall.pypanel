@@ -1,0 +1,611 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<pythonPanelDocument>
+  <!-- This file contains definitions of Python interfaces and the
+ interfaces menu.  It should not be hand-edited when it is being
+ used by the application.  Note, that two definitions of the
+ same interface or of the interfaces menu are not allowed
+ in a single file. -->
+  <interface name="Hywall" label="Hywal" icon="COP2_color" showNetworkNavigationBar="true" help_url="">
+    <script><![CDATA[import hou
+from hutil.PySide import QtWidgets, QtCore
+from hutil.PySide.QtWidgets import QApplication, QWidget, QLabel, QVBoxLayout, QHBoxLayout, QGroupBox, QLineEdit, QPushButton, QFileDialog, QSizePolicy, QTabWidget, QComboBox, QStatusBar, QScrollArea
+from hutil.PySide.QtGui import QPixmap, QColor
+from PIL import Image
+from coloraide.everything import ColorAll as Color
+import csv
+import json
+import os
+
+
+class ColorBox(QWidget):
+
+
+    def __init__(self):
+        super().__init__()
+
+        self.info = """Hywall is a tool for generating inspiring colour palettes from images in Houdini. 
+            It is inspired by Pywall and Pastel. Developed by Hakeem Adam [hakeemadam.info].
+
+        * Instructions
+            - Add an image to generate a colour palette
+            - Click on an individual colour to copy it to the clipboard
+            - Click on a section with a node that has a ramp selected to past it
+            - Export the palette to CSS, CSV, JSON or GPL
+    """
+
+        #self.resize(600, 600)
+        self.setWindowTitle("Hywall")
+
+        self.colorSelection=[]
+        self.secondaryColors =[]
+        self.tertiaryColors =[]
+        self.darkColors=[]
+        self.themeColors=[]
+        self.color_layouts={}
+
+        self.group_boxes = {}
+        self.imagePath =""
+        self.color_data ={}
+        self.color_format='hex' #Hex, RGB, HSL
+        self.color_format_options = ['hex', 'hsl', 'rgb']
+        self.color_space_options =['srgb','srgb-linear','acescg','rec2020','oklch','oklab','lab','lch','cmyk']
+        self.color_space='srgb'
+        self.exporter_options =['CSV', 'JSON','GPL', 'CSS']
+        self.selected_exporter='CSV'
+
+
+
+        # Main Layout
+        self.main_layout = QVBoxLayout()
+        # Create Elements
+        self.LoadImage()
+        self.createColorBoxes("Main")
+        self.createColorBoxes("Pastels")
+        self.createColorBoxes("Warm Shift")
+        self.createColorBoxes("Dark Mode")
+        self.createColorBoxes("Cool Shift")
+
+        # status bar
+        self.statusBar = QStatusBar()
+        self.statusBar.addWidget(QLabel("Status bar"))
+        self.statusBar.setMinimumHeight(16)
+        self.main_layout.addWidget(self.statusBar)
+
+
+        #scrolling
+        scroll_content = QWidget()
+        scroll_content.setLayout(self.main_layout)
+
+        scroll_area = QScrollArea()
+        scroll_area.setWidgetResizable(True)
+        scroll_area.setWidget(scroll_content)
+
+        outer_layout = QVBoxLayout()
+        outer_layout.setContentsMargins(0,0,0,0)
+        outer_layout.addWidget(scroll_area)
+
+        self.setLayout(outer_layout)
+
+    def LoadImage(self):
+
+        # tabs
+        tab_widget = QTabWidget()
+
+        self.image_section = QGroupBox("Image")
+
+        # main layout
+        image_layout = QVBoxLayout()
+
+        # Options Layout
+        options_layout = QHBoxLayout()
+        options_layout.setAlignment(QtCore.Qt.AlignmentFlag.AlignLeft)
+
+        # input field
+        self.file_path_line = QLineEdit()
+        self.file_path_line.setPlaceholderText("Select an Image")
+        self.file_path_line.returnPressed.connect(lambda: self.updateImagePreview(self.file_path_line.text()))
+        self.file_path_line.returnPressed.connect(self.updateColors)
+
+        # browser btn
+        browse_btn = QPushButton("Browse")
+        browse_btn.setFixedWidth(100)
+        browse_btn.clicked.connect(self.openDialog)
+
+        # export btn
+        export_btn = QPushButton("Export")
+        export_btn.setFixedWidth(100)
+        export_btn.clicked.connect(self.exportPalette)
+
+        # exporter options
+        export_opts =QComboBox()
+        export_opts.addItems(self.exporter_options)
+        export_btn.setFixedWidth(100)
+        export_opts.currentIndexChanged.connect(self.exporterFormatChanged)
+
+        # Color format toggle
+        # format_btn = QComboBox()
+        # format_btn.addItems(self.color_format_options)
+        # format_btn.setFixedWidth(100)
+        # format_btn.currentIndexChanged.connect(self.colourFormatChanged)
+
+        # Color space toggle
+        space_opts = QComboBox()
+        space_opts.addItems(self.color_space_options)
+        space_opts.setFixedWidth(100)
+        space_opts.currentIndexChanged.connect(self.colorSpaceChanged)
+
+        # image
+        self.image_preview = QLabel("No Image selected")
+        self.image_preview.setAlignment(QtCore.Qt.AlignCenter)
+        self.image_preview.setSizePolicy(QSizePolicy.Policy.Expanding,QSizePolicy.Policy.Expanding)
+        self.image_preview.setMinimumSize(150, 150)
+
+        image_layout.addWidget(self.image_preview)
+        image_layout.addWidget(self.file_path_line)
+
+        options_layout.addWidget(browse_btn)
+        options_layout.addWidget(export_btn)
+        options_layout.addWidget(export_opts)
+        # options_layout.addWidget(format_btn)
+        options_layout.addWidget(space_opts)
+
+        image_layout.addLayout(options_layout)
+        self.image_section.setLayout(image_layout)
+
+        # help section
+        help_section = QGroupBox("Help")
+        help_layout = QVBoxLayout()
+        help_text = QLabel(self.info)
+        help_layout.addWidget(help_text)
+        help_section.setLayout(help_layout)
+
+        # assemble tabs
+        tab_widget.addTab(self.image_section, 'Preview')
+        tab_widget.addTab(help_section, 'Help')
+
+
+        self.main_layout.addWidget(tab_widget, stretch=5)
+
+
+    def generateMainColor(self):
+        self.colorSelection=[]
+        if not self.imagePath:
+            return
+        try:
+            # image, or color, create palettes, create boxes
+
+            img = Image.open(self.imagePath)
+            img.thumbnail((128, 128))
+            img = img.convert("RGB")
+
+
+            quantized = img.quantize(colors=9)
+            palette = quantized.getpalette()
+
+            hex_results = []
+            for i in range(0, len(palette), 3):
+                r, g, b = palette[i], palette[i+1], palette[i+2]
+                hex_results.append(f"#{r:02x}{g:02x}{b:02x}")
+
+            filtered = []
+            for hex_color in hex_results:
+                c = Color(hex_color).convert('oklch')
+                if 0.15 < c['lightness'] < 0.95:
+                    filtered.append(hex_color)
+
+            self.colorSelection = filtered[:8] if filtered else hex_results[:8]
+
+        except Exception as e:
+            print(f"Error processing image: {e}")
+            self.colorSelection = []
+
+    def generatePastelColors(self):
+        self.secondaryColors = []
+        if not self.imagePath:
+            return
+        try:
+            for hex_color in self.colorSelection:
+                c = Color(hex_color).convert('oklch')
+                c.set('lightness', 0.85)
+                c.set('chroma', lambda  ch: ch * 0.4)
+                self.secondaryColors.append(c.convert('srgb').to_string(hex=True))
+        except Exception as e:
+            print(f"Error processing image: {e}")
+            self.secondaryColors =[]
+
+
+    def generateWarmShift(self):
+        self.tertiaryColors = []
+        if not self.imagePath:
+            return
+        try:
+            for hex_color in self.colorSelection:
+                c = Color(hex_color).convert('oklch')
+                c.set('hue', lambda h: (h + 30) % 360 if h == h else 30)
+                c.set('chroma', lambda ch: ch * 1.1)
+                self.tertiaryColors.append(c.convert('srgb').to_string(hex=True))
+
+        except Exception as e:
+            print(f"Error Processing image: {e}")
+            self.tertiaryColors=[]
+    
+    
+    def generateDarkMode(self):
+        self.darkColors=[]
+        if not self.imagePath:
+            return
+        try:
+            for hex_color in self.colorSelection:
+                c = Color(hex_color).convert('oklch')
+                c.set('lightness', lambda l: l * 0.3)
+                c.set('chroma', lambda ch: ch * 0.8)
+                self.darkColors.append(c.convert('srgb').to_string(hex=True))
+        except Exception as e:
+            self.showStatus(f"Error Processing image: {e}", is_error=True)
+            self.darkColors=[]
+
+    def generateCoolShift(self):
+        self.themeColors=[]
+        if not self.imagePath:
+            return
+        try:
+            for hex_color in self.colorSelection:
+                c = Color(hex_color).convert('oklch')
+                c.set('hue', lambda h: (h - 30) % 360 if h == h else 210)
+                c.set('chroma', lambda ch: ch * 1.1)
+                self.themeColors.append(c.convert('srgb').to_string(hex=True))
+        except Exception as e:
+            self.showStatus(f"Error Processing image: {e}", is_error=True)
+            self.themeColors=[]
+
+    
+
+
+    def createColorBoxes(self, palette_name):
+        groupBox = QGroupBox(palette_name)
+        self.group_boxes[palette_name] = groupBox
+
+        groupBox.mousePressEvent = lambda e, name=palette_name: self.applyRampToSelected(name)
+        groupBox.setStyleSheet("QGroupBox { padding-top: 12px; margin-top: 4px;}")
+
+        color_layout = QHBoxLayout()
+        color_layout.setContentsMargins(2,2,2,2)
+        color_layout.setSpacing(2)
+
+        self.color_layouts[palette_name] = color_layout
+        groupBox.setLayout(color_layout)
+        self.main_layout.addWidget(groupBox, stretch=0)
+
+    def updateColors(self):
+        self.generateMainColor()
+        self.generatePastelColors()
+        self.generateWarmShift()
+        self.generateDarkMode()
+        self.generateCoolShift()
+
+        self.color_data = {
+            "Main": self.colorSelection,
+            "Pastels": self.secondaryColors,
+            "Warm Shift": self.tertiaryColors,
+            "Dark Mode": self.darkColors,
+            "Cool Shift": self.themeColors
+        }
+
+
+        for palette_name, layout in self.color_layouts.items():
+            while layout.count():
+                child = layout.takeAt(0)
+                if child.widget():
+                    child.widget().deleteLater()
+
+
+            colors = self.color_data[palette_name]
+
+            # For each color, show
+            for color in colors:
+                #hex_str =f"#{color_int & 0xffffff:06x}"
+                hex_str = color
+
+                # arrange in box, label in col
+                column_container = QWidget(self.group_boxes[palette_name])
+                column_container.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
+
+                column_layout = QVBoxLayout(column_container)
+                column_layout.setContentsMargins(0, 0, 0, 0)
+                column_layout.setSpacing(1)
+
+                color_widget = QWidget()
+                color_widget .setStyleSheet(f"background-color: {hex_str}; border: 1px solid black;")
+                color_widget.setMinimumHeight(30)
+                color_widget.mousePressEvent = lambda e, h=hex_str: (QApplication.clipboard().setText(h), self.showStatus(f"Colour copied to clipboard: {h}", False, 1000))
+
+                color_value =  self.convertColor(hex_str, self.color_format)
+                label = QLabel(color_value)
+                label.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
+
+                label.setStyleSheet("font-size: 8.5px; color: #f5f5f5;")
+
+
+                # Add widgets to col
+                column_layout.addWidget(color_widget)
+                column_layout.addWidget(label)
+
+                # ad col to horizontal box
+                layout.addWidget(column_container)
+
+
+    def updateImagePreview(self, path):
+        # setting pixmap on event, might remove path var
+        self.imagePath = path
+        if path:
+            pixmap = QPixmap(path)
+            if not pixmap.isNull():
+                self._cached_pixmap = pixmap
+                QtCore.QTimer.singleShot(0, self.rescalePreview)
+            else:
+                self.image_preview.setText("No Image Selected")
+                
+    def rescalePreview(self):
+        if hasattr(self, '_cached_pixmap') and self._cached_pixmap:
+            self.image_preview.setPixmap(self._cached_pixmap.scaled(
+                self.image_preview.size(),
+                QtCore.Qt.AspectRatioMode.KeepAspectRatio,
+                QtCore.Qt.TransformationMode.SmoothTransformation
+            ))
+
+
+    def openDialog(self):
+        path, _ = QFileDialog.getOpenFileName(self, "Select Image", "", "Images (*.png *.jpg *.jpeg *.bmp *.tiff *.exr)")
+        if path:
+            self.file_path_line.setText(path)
+            self.imagePath=path
+            self.updateImagePreview(path)
+            self.updateColors()
+
+    def updatePath(self, text):
+        self.imagePath = text
+        #print(self.imagePath)
+
+    # Houdini only
+    def applyRampToSelected(self, palette_name):
+        if palette_name not in self.color_data:
+            self.showStatus("No colors to apply", is_error=True)
+            return
+
+        colors = self.color_data[palette_name]
+        if not colors:
+            return
+
+        sel = hou.selectedNodes()
+        if not sel:
+            self.showStatus("Select a node with a color ramp parameter", is_error=True)
+            return
+
+        # TODO: Works with only the first ramp on the node
+        node = sel[0]
+        ramp_parms = [
+            p for p in node.parms()
+            if isinstance(p.parmTemplate(), hou.RampParmTemplate)
+               and p.parmTemplate().parmType() == hou.rampParmType.Color
+        ]
+
+        if not ramp_parms:
+            self.showStatus(f"No color ramp found on {node.name()}", is_error=True)
+            return
+
+        basis = [hou.rampBasis.Linear] * len(colors)
+        keys = [i / (len(colors) - 1) if len(colors) > 1 else 0.0 for i in range(len(colors))]
+        values = []
+        for hex_color in colors:
+            c = Color(hex_color)
+            values.append((c['red'], c['green'], c['blue']))
+
+        ramp = hou.Ramp(basis, keys, values)
+        ramp_parms[0].set(ramp)
+        self.showStatus(f"Applied {palette_name} ramp to {node.name()}.{ramp_parms[0].name()}")
+
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        if self.imagePath:
+            self.rescalePreview()
+
+    def showStatus(self, message, is_error=False, timeout=5000):
+        self.statusBar.showMessage(message, timeout)
+        if is_error:
+            self.statusBar.setStyleSheet("QStatusBar color: red")
+        else:
+            self.statusBar.setStyleSheet("QStatusBar color: green")
+
+    # def colourFormatChanged(self, index):
+    #     self.color_format = self.color_format_options[index]
+    #     if not self.color_data:
+    #         return False
+    #     try:
+    #         self.updateColors()
+    #     except Exception as e:
+    #         self.showStatus(f"Choose an image first: {e}", is_error=True)
+    #         #print(f"Choose an image first")
+    #         return False
+    #     #print(self.color_format)
+
+    def colorSpaceChanged(self, index):
+        self.color_space =self.color_space_options[index]
+        if not self.color_data:
+            return False
+        try:
+            self.updateColors()
+        except Exception as e:
+            self.showStatus(f"Choose an image first: {e}", is_error=True)
+            #print(f"Choose an image first")
+            return False
+
+    def exporterFormatChanged(self, index):
+        self.selected_exporter = self.exporter_options[index]
+
+    def exportPalette(self):
+        exporters = {
+            'CSV' : self.exportPaletteCSV,
+            'JSON': self.exportPaletteJSON,
+            'GPL': self.exportPaletteGPL,
+            'CSS': self.exportPaletteCSS
+        }
+
+        if self.selected_exporter in exporters:
+            exporters[self.selected_exporter]()
+        else:
+            self.showStatus("No exporter selected", is_error=True)
+            #print("No exporter selected")
+
+
+    # color converter
+    def convertColorspace(self, hex_color, space='srgb'):
+        c = Color(hex_color)
+        try:
+            if space == 'srgb':
+                return hex_color
+
+            converted = c.convert(space)
+
+            # Non-RGB spaces use native format
+            if space in ['cmyk', 'lab', 'lch', 'oklch', 'oklab']:
+                return converted.to_string()
+            else:
+                # RGB-based spaces can be hex
+                return converted.to_string(hex=True)
+        except Exception as e:
+            print(f"Color space error: {e}")
+            return hex_color
+
+    def convertColor(self, hex_color, format='hex'):
+        c = Color(hex_color)
+        if format == 'rgb':
+            r = int(c['red'] * 255)
+            g = int(c['green'] * 255)
+            b = int(c['blue'] * 255)
+            return f"rgb({r}, {g}, {b})"
+        elif format == 'hsl':
+            return c.convert('hsl').to_string()
+        return hex_color
+
+    # export functions
+    def getExportPath(self, extension):
+        return os.path.splitext(self.imagePath)[0] + extension
+
+    def validateExport(self, file_path):
+        if not self.color_data or not self.color_data:
+            return False
+        return True
+
+    def exportPaletteCSV(self):
+
+        file_path = self.getExportPath('.csv')
+        if not self.validateExport(file_path):
+            self.showStatus("No palette to export", is_error=True)
+            return False
+        try:
+            with open(file_path, 'w', newline='') as f:
+                writer = csv.writer(f)
+                writer.writerow(['Name', 'Colours'])
+
+                for palette_name, colour_list in self.color_data.items():
+                    converted = [
+                        self.convertColor(
+                            self.convertColorspace(c, self.color_space),
+                            self.color_format
+                        )
+                        for c in colour_list
+                    ]
+                    writer.writerow([palette_name, converted])
+            self.showStatus(f"Exported to {file_path}")
+            #print(f"Successfully exported palette to {file_path}")
+            return True
+        except Exception as e:
+            self.showStatus(f"Export failed: {e}", is_error=True)
+            #print(f"Failed to export CSV palette: {e}")
+            return False
+
+    def exportPaletteJSON(self):
+
+        file_path = self.getExportPath('.json')
+        if not self.validateExport(file_path):
+            self.showStatus("No palette to export", is_error=True)
+            return False
+        try:
+            converted_data = {}
+            for palette_name, colour_list in self.color_data.items():
+                converted = [
+                    self.convertColor(
+                        self.convertColorspace(c, self.color_space),
+                        self.color_format
+                    )
+                    for c in colour_list
+                ]
+                converted_data[palette_name] = converted
+            with open(file_path, 'w') as f:
+                json.dump(converted_data, f, indent=2)
+            self.showStatus(f"Exported to {file_path}")
+            #print(f"Successfully exported palette to {file_path}")
+            return True
+        except Exception as e:
+            self.showStatus(f"Export failed: {e}", is_error=True)
+            #print(f"Failed to export JSON palette: {e}")
+            return False
+
+    def exportPaletteGPL(self):
+        file_path = self.getExportPath('.gpl')
+        if not self.validateExport(file_path):
+            self.showStatus("No palette to export", is_error=True)
+            return False
+        try:
+            with open(file_path, 'w') as f:
+                f.write("GIMP Palette\n")
+                f.write(f"Name: {os.path.basename(file_path)}\n")
+                f.write("#\n")
+                for palette_name, color_list in self.color_data.items():
+                    for i, hex_color in enumerate(color_list):
+                        rgb = tuple(int(hex_color.lstrip('#')[j:j+2], 16) for j in (0, 2, 4))
+                        color_name = f"{palette_name}_{i+1}"
+                        f.write(f"{rgb[0]:3d} {rgb[1]:3d} {rgb[2]:3d}  {color_name}\n")
+            self.showStatus(f"Exported to {file_path}")
+            #print(f"Successfully exported palette to {file_path}")
+            return True
+        except Exception as e:
+            self.showStatus(f"Export failed: {e}", is_error=True)
+            #print(f"Failed to export GPL palette {e}")
+            return False
+
+    def exportPaletteCSS(self):
+
+        file_path = self.getExportPath('.css')
+        if not self.validateExport(file_path):
+            self.showStatus("No palette to export", is_error=True)
+            return False
+        try:
+            with open(file_path, 'w') as f:
+                f.write(":root {\n")
+                for palette_name, color_list in self.color_data.items():
+                    for i, hex_color in enumerate(color_list):
+                        converted = self.convertColor(
+                            self.convertColorspace(hex_color, self.color_space),
+                            self.color_format
+                        )
+                        var_name = f"{palette_name.lower().replace(' ', '-')}-{i+1}"
+                        f.write(f"  --{var_name}: {converted};\n")
+                f.write("}\n")
+            self.showStatus(f"Exported to {file_path}")
+            #print(f"Successfully exported palette to {file_path}")
+            return True
+        except Exception as e:
+            self.showStatus(f"Export failed: {e}", is_error=True)
+            #print(f"Failed to export CSS palette {e}")
+            return False
+
+def onCreateInterface():
+    return ColorBox()]]></script>
+    <includeInPaneTabMenu menu_position="0" create_separator="false"/>
+    <includeInToolbarMenu menu_position="210" create_separator="false"/>
+    <showInParametersPane optype=""/>
+    <help><![CDATA[]]></help>
+  </interface>
+</pythonPanelDocument>
