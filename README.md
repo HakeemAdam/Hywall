@@ -13,7 +13,7 @@ Generates 5 palette variants: Main, Pastels, Warm Shift, Dark Mode, and Cool Shi
 - Colour space selector for exports (sRGB, ACEScg, OKLab, etc.)
 
 ## Installation
-1. Download or clone into your Houdini prefs folder:
+1. Download or clone into your Houdini User folder:
         
         Linux
             cd ~/houdini21.0

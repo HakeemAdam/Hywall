@@ -1,7 +1,3 @@
 {
-  "env": [
-    {
-      "HOUDINI_PATH": {"value": "$HOUDINI_USER_PREF_DIR/hywall"}
-    }
-  ]
+  "hpath": "$HOUDINI_USER_PREF_DIR/hywall-master"
 }
